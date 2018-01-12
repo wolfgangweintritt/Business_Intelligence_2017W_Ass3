@@ -59,6 +59,12 @@ def parse_args():
                         required=True,
                         default=0.0)
 
+    parser.add_argument("-c", "--missing-character",
+                        metavar="CHAR",
+                        type=str,
+                        help="Character (or string) to use for marking that the entry is missing",
+                        default="\"?\"")
+
     parser.add_argument("-o", "--output-file",
                         metavar="OUT-FILE",
                         help="Name of the file to store the result",
@@ -174,10 +180,7 @@ def make_lines_csv(header, data_frame):
         line = []
         for attr in hdr:
             value = data_frame[attr][i]
-            if value == "?":
-                line.append("\"?\"")
-            else:
-                line.append(value)
+            line.append(value)
         lines.append(",".join(line))
 
     return lines
@@ -220,7 +223,7 @@ def forget(column, percent):
                 forget_this.append(idx)
 
         for idx in forget_this:
-            forgotten[idx] = "?"
+            forgotten[idx] = missing_character
 
         return forgotten
 
@@ -228,7 +231,7 @@ def forget(column, percent):
         # if we want to forget > 50%, it is actually simpler
         # to forget everything and remember only (100-x)%
         percent = 1 - percent
-        remembered = ["?" for x in column]
+        remembered = [missing_character for x in column]
         amount = int(math.ceil(percent * len(column)))
         remember_this = []
 
@@ -253,6 +256,7 @@ seed = args.seed
 percent = args.percentage / 100.0
 out_file = args.output_file
 out_file_type = args.output_type
+missing_character = args.missing_character
 
 # set the seed for the RNG
 random.seed(seed)
@@ -272,7 +276,7 @@ for attr in attributes:
     # calculate how many entries we forgot (for debugging purposes)
     cnt = 0
     for x in data_frame[attr]:
-        if x == "?":
+        if x == missing_character:
             cnt += 1
 
 # depending on whether an output file was specified, write it into that file
