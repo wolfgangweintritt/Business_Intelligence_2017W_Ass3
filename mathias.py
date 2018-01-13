@@ -63,7 +63,7 @@ def parse_args():
                         metavar="CHAR",
                         type=str,
                         help="Character (or string) to use for marking that the entry is missing",
-                        default="\"?\"")
+                        default="?")
 
     parser.add_argument("-o", "--output-file",
                         metavar="OUT-FILE",
