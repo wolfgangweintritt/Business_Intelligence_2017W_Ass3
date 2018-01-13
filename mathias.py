@@ -21,10 +21,10 @@ def percentage_type(arg):
 
 
 def output_type(arg):
-    """Check if we support the output type supported (only CSV at the moment)"""
+    """Check if we support the output type supported (CSV or ARFF)"""
     arg = str(arg).lower()
-    if arg not in ["csv"]:
-        raise argparse.ArgumentTypeError("Only CSV is supported at the moment")
+    if arg not in ["csv", "arff"]:
+        raise argparse.ArgumentTypeError("Only CSV and ARFF are supported")
 
     return arg
 
@@ -94,6 +94,20 @@ def determine_file_type(file_name):
         ext = "arff"
 
     return ext
+
+
+def fetch_meta_information_arff(lines):
+    """Fetch the meta data from the ARFF file"""
+    data = []
+    for line in lines:
+        data.append(line)
+
+        # the line starting with @data is the last line we want
+        if "@data" in line:
+            break
+
+    data = [l.strip() for l in data]
+    return data
 
 
 def fetch_data_arff(lines):
@@ -167,14 +181,14 @@ def make_data_frame(header, body):
 
 def make_lines_csv(header, data_frame):
     """Make the data_frame into lines with CSV format"""
-    header = []
+    header_ = []
     lines = []
     line_count = 0
-    for attr in hdr:
-        header.append("\"%s\"" % attr)
+    for attr in header:
+        header_.append("\"%s\"" % attr)
         line_count = len(data_frame[attr])
 
-    lines.append(",".join(header))
+    lines.append(",".join(header_))
 
     for i in range(line_count):
         line = []
@@ -184,6 +198,42 @@ def make_lines_csv(header, data_frame):
         lines.append(",".join(line))
 
     return lines
+
+
+def make_lines_arff(meta, header, data_frame):
+    """Make the data_frame into lines with ARFF format"""
+    lines = meta[:]
+    line_count = 0
+
+    for attr in header:
+        line_count = len(data_frame[attr])
+
+    for i in range(line_count):
+        line = []
+        for attr in hdr:
+            value = data_frame[attr][i]
+            line.append(value)
+        lines.append(",".join(line))
+
+    return lines
+
+
+def make_lines(header, data_frame, meta=None):
+    """Make the data_frame into lines with the format read from the command-line arguments"""
+
+    if out_file_type == "csv":
+        return make_lines_csv(header, data_frame)
+
+    elif out_file_type == "arff":
+        # if we have no ARFF meta data, we have to come up with some... TODO
+        if meta is None:
+            raise Exception("We currently only support ARFF output if there was ARFF input")
+            meta = []
+
+        return make_lines_arff(meta, header, data_frame)
+
+    else:
+        raise Exception("Unknown Output File Format! We only know CSV and ARFF")
 
 
 def fetch_data(file_name):
@@ -199,6 +249,8 @@ def fetch_data(file_name):
         header = fetch_header_csv(lines)
         body = fetch_data_csv(lines)
     elif ext.lower() == "arff":
+        global arff_meta
+        arff_meta = fetch_meta_information_arff(lines)
         header = fetch_header_arff(lines)
         body = fetch_data_arff(lines)
     else:
@@ -262,6 +314,7 @@ missing_character = args.missing_character
 random.seed(seed)
 
 # fetch the header and data from the dataset file
+arff_meta = []
 (hdr, data_frame) = fetch_data(data_file)
 
 # if the user did not specify any attributes to forget, we just
@@ -281,7 +334,7 @@ for attr in attributes:
 
 # depending on whether an output file was specified, write it into that file
 # or print it to stdout
-lines = make_lines_csv(hdr, data_frame)
+lines = make_lines(hdr, data_frame, arff_meta)
 if out_file is not None:
     with open(out_file, "w") as out:
         for line in lines:
@@ -290,5 +343,5 @@ else:
     for line in lines:
         try:
             print(line)
-        except BrokenPipeError:
+        except:
             sys.stderr.close()
