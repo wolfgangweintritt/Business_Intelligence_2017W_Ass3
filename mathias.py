@@ -34,7 +34,7 @@ def parse_args():
     description = "'Forget' some values from the dataset and replace them by missing values."
 
     epilog = "This script is named Mathias because it takes a while " \
-             "and then kind of forgets parts of its input."
+             "and then kind of forgets parts of its input, just as Mathias does."
 
     parser = argparse.ArgumentParser(description=description,
                                      epilog=epilog)
@@ -52,13 +52,6 @@ def parse_args():
                              "if this parameter is left out, all attributes will be affected",
                         default=None)
 
-    parser.add_argument("-p", "--percentage",
-                        metavar="PERCENT",
-                        type=percentage_type,
-                        help="Percentage of attributes to forget (0 <= X <= 100)",
-                        required=True,
-                        default=0.0)
-
     parser.add_argument("-c", "--missing-character",
                         metavar="CHAR",
                         type=str,
@@ -75,6 +68,13 @@ def parse_args():
                         help="Type to use for the output file",
                         type=output_type,
                         default="csv")
+
+    parser.add_argument("-p", "--percentage",
+                        metavar="PERCENT",
+                        type=percentage_type,
+                        help="Percentage of attributes to forget (0 <= X <= 100)",
+                        required=True,
+                        default=0.0)
 
     parser.add_argument("data_file",
                         metavar="DATASET",
