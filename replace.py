@@ -281,12 +281,12 @@ def replace(column, type, source, classes):
                 classReplacement[i] = classMean[i]
 
         else:
-            for i, c in enumerate(classMedian):
-                classMedian[i].sort()
-                if len(classMedian[i]) % 2 == 1:
-                    classReplacement[i] = classMedian[i][int((len(classMedian[i]) - 1) / 2)]
+            for i, m in enumerate(classMedian):
+                m.sort()
+                if len(m) % 2 == 1:
+                    classReplacement[i] = m[int((len(m) - 1) / 2)]
                 else:
-                    classReplacement[i] = classMedian[i][int((len(classMedian[i]) / 2) - 1)]
+                    classReplacement[i] = m[int((len(m) / 2) - 1)]
 
         for i, value in enumerate(column):
             if value == missing_character:
