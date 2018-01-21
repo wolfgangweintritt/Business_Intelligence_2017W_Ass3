@@ -1,24 +1,10 @@
 #!/usr/bin/env python
-"""Take a dataset and forget some of its values.
-
-This script is called Mathias because it takes a while and then kind of forgets part of its input
-"""
+"""Take a dataset and replace hidden values with the mean or median of other values."""
 
 import argparse
-import random
-import math
 import sys
 
 
-def percentage_type(arg):
-    """Check if the argument is a valid percentage between 0 and 100 inclusively"""
-    arg = float(arg)
-    if arg < 0:
-        raise argparse.ArgumentTypeError("Minimum percentage is 0%")
-    elif arg > 100:
-        raise argparse.ArgumentTypeError("Maximum percentage is 100%")
-    return arg
-	
 def output_type(arg):
     """Check if we support the output type supported (CSV or ARFF)"""
     arg = str(arg).lower()
@@ -30,45 +16,31 @@ def output_type(arg):
 def parse_args():
     """Parse the command-line arguments for the script"""
 
-    description = "'Forget' some values from the dataset and replace them by missing values."
-
-    epilog = "This script is named Mathias because it takes a while " \
-             "and then kind of forgets parts of its input, just as Mathias does."
+    description = "Replace missing values from the dataset with the median or mean of other values."
+    
+    epilog = "Thanks for using the replace service!"
 
     parser = argparse.ArgumentParser(description=description,
                                      epilog=epilog)
 
-    parser.add_argument("distribution_type",
-                        metavar="DISTRIBUTION",
+    parser.add_argument("value_type",
+                        metavar="VALUE_TYPE",
                         type=str,
-                        help="The distribution type of the missing values either 'random' or 'manual'",
-                        choices=["random", "manual"],
-                        default="random")
-                                     
-    parser.add_argument("-s", "--seed",
-                        metavar="SEED",
-                        type=int,
-                        help="The Seed for the Random Number Generator",
-                        default=None)
-
-    parser.add_argument("-a", "--attributes",
-                        metavar="ATTRIBUTES",
-                        type=str,
-                        help="Comma-separated list of attributes whose values to forget, only works with random distribution -- " \
-                             "if this parameter is left out, all attributes will be affected",
-                        default=None)
+                        help="The replacement type for the missing values, either 'mean' or 'median'",
+                        choices=["mean", "median"],
+                        default="mean")
                         
-    parser.add_argument("-m", "--manual-distribution",
-                        metavar="ATTRIBUTE-PERCENT-PAIRS",
+    parser.add_argument("value_source",
+                        metavar="SOURCE",
                         type=str,
-                        help="Comma-seperated list of colon-seperated parameter:percentage pairs, only works with manual distribution -- " \
-                             "if this parameter is left out, a random distribution of missing values will be used",
-                        default=None)
+                        help="The source from where replacement values will be calculated, either 'all' or 'class'",
+                        choices=["all", "class"],
+                        default="all")
 
     parser.add_argument("-c", "--missing-character",
                         metavar="CHAR",
                         type=str,
-                        help="Character (or string) to use for marking that the entry is missing",
+                        help="Character (or string) used to mark a missing entry",
                         default="?")
 
     parser.add_argument("-o", "--output-file",
@@ -82,12 +54,6 @@ def parse_args():
                         type=output_type,
                         default="csv")
 
-    parser.add_argument("-p", "--percentage",
-                        metavar="PERCENT",
-                        type=percentage_type,
-                        help="Percentage of attributes to forget (0 <= X <= 100), only works with random distribution",
-                        default=0.0)
-                        
     parser.add_argument("data_file",
                         metavar="DATASET",
                         type=str,
@@ -272,137 +238,88 @@ def fetch_data(file_name):
     return (header, make_data_frame(header, body))
 
 
-def forget(column, percent):
-    """Forget a specified percentage of the specified column"""
-    if percent <= 0.5:
-        # if we want to forget at most half of the dataset,
-        # just go on and forget it
-        forgotten = column[:]
-        amount = int(math.ceil(percent * len(column)))
-        forget_this = []
+def replace(column, type, source, classes):
+    """Replace missing values in the column"""
+    replacementValue = 0.0
+    classReplacement = [0.0] * 4
+    mean = 0.0
+    count = 0
+    median = []
+    classMean = [0.0] * 4
+    classCount = [0] * 4
+    classMedian = [[]] * 4
+    for i, value in enumerate(column):
+        if value != missing_character:
+            value = float(value)
+            count += 1
+            mean += value
+            median.append(value)
+            classCount[int(classes[i]) - 1] += 1
+            classMean[int(classes[i]) - 1] += value
+            classMedian[int(classes[i]) - 1].append(value)
 
-        while len(forget_this) < amount:
-            idx = random.randint(0, len(forgotten) - 1)
-            if idx not in forget_this:
-                forget_this.append(idx)
+    if source == "all":
+        if type == "mean":
+            mean = mean / count
+            replacementValue = mean
+            
+        else:
+            median.sort()
+            if len(median) % 2 == 1:
+                replacementValue = median[int((len(median) - 1) / 2)]
+            else:
+                replacementValue = median[int((len(median) / 2) - 1)]
 
-        for idx in forget_this:
-            forgotten[idx] = missing_character
-
-        return forgotten
-
+        for i, value in enumerate(column):
+            if value == missing_character:
+                column[i] = "{:.3f}".format(replacementValue)
+                
     else:
-        # if we want to forget > 50%, it is actually simpler
-        # to forget everything and remember only (100-x)%
-        percent = 1 - percent
-        remembered = [missing_character for x in column]
-        amount = int(math.ceil(percent * len(column)))
-        remember_this = []
+        if type == "mean":
+            for i, mean in enumerate(classMean):
+                classMean[i] = mean / classCount[i]
+                classReplacement[i] = classMean[i]
 
-        while len(remember_this) < amount:
-            idx = random.randint(0, len(remembered) - 1)
-            if idx not in remember_this:
-                remember_this.append(idx)
+        else:
+            for i, c in enumerate(classMedian):
+                classMedian[i].sort()
+                if len(classMedian[i]) % 2 == 1:
+                    classReplacement[i] = classMedian[i][int((len(classMedian[i]) - 1) / 2)]
+                else:
+                    classReplacement[i] = classMedian[i][int((len(classMedian[i]) / 2) - 1)]
 
-        for idx in remember_this:
-            remembered[idx] = column[idx]
+        for i, value in enumerate(column):
+            if value == missing_character:
+                column[i] = "{:.3f}".format(classReplacement[int(classes[i]) - 1])
 
-        return remembered
+
+    return column
 
 
 # parse and fetch the command-line arguments
 args = parse_args()
-distribution = args.distribution_type
-manual = args.manual_distribution
-if manual is None or len(manual) <= 0:
-    distribution = "random"
-if manual is not None:
-    manual = manual.split(",")
+type = args.value_type
+source = args.value_source
 data_file = args.data_file
-attributes = args.attributes
-if attributes is not None:
-    attributes = attributes.split(",")
-seed = args.seed
-percent = args.percentage / 100.0
 out_file = args.output_file
 out_file_type = args.output_type
 missing_character = args.missing_character
-
-# set the seed for the RNG
-random.seed(seed)
 
 # fetch the header and data from the dataset file
 arff_meta = []
 (hdr, data_frame) = fetch_data(data_file)
 
-# if the user did not specify any attributes to forget, we just
-# apply the forgetting to all attributes
-if attributes is None or len(attributes) <= 0:
-    attributes = hdr
-    classAttribute = attributes[-1]
-    del attributes[-1]
-
-# do the forgetting
-if distribution == "random":
-    attributeCount = len(attributes)
-    totalPercent = percent * attributeCount
-    randomPercent = [0] * attributeCount
-
-    # decide from which attributes what number of percent get deleted
-    for i, p in enumerate(randomPercent):
-        minPercent = max(0, totalPercent - (attributeCount - 1))
-        maxPercent = min(1, totalPercent)
-        randomPercent[i] = random.uniform(minPercent, maxPercent)
-        attributeCount -= 1
-        totalPercent -= randomPercent[i]
-    
-	# shuffle outcome randomly
-    shuffledPercent = [-1] * len(randomPercent)
-    slen = len(shuffledPercent)
-    for i, p in enumerate(randomPercent):
-        sidx = random.randint(0, slen)
-        if shuffledPercent[sidx] == -1:
-            shuffledPercent[sidx] = randomPercent[i]
-        else:
-            for j, q in enumerate(shuffledPercent):
-                if q == -1:
-                    if sidx == 0:
-                        shuffledPercent[j] = randomPercent [i]
-                    else:
-                        sidx -= 1
-        slen -= 1
-		
-    for i, attr in enumerate(attributes):
-        data_frame[attr] = forget(data_frame[attr], shuffledPercent[i])
-
-        # calculate how many entries we forgot (for debugging purposes)
-        cnt = 0
-        for x in data_frame[attr]:
-            if x == missing_character:
-                cnt += 1
-                
-else:
-    for pair in manual:
-        # split the pairs and forget for each given attribute the given %
-        split = pair.split(":")
-        attr = split[0]
-        percent = float(split[1])
-        if percent < 0:
-            percent = 0
-        if percent > 100:
-            percent = 100
-        percent = percent / 100.0
-        data_frame[attr] = forget(data_frame[attr], percent)
-
-        # calculate how many entries we forgot (for debugging purposes)
-        cnt = 0
-        for x in data_frame[attr]:
-            if x == missing_character:
-                cnt += 1
+# do the replacing
+for attr in hdr:
+    missingCheck = False
+    for value in data_frame[attr]:
+        if value == missing_character:
+            missingCheck = True
+    if missingCheck == True:
+        data_frame[attr] = replace(data_frame[attr], type, source, data_frame["Class"])
 
 # depending on whether an output file was specified, write it into that file
 # or print it to stdout
-attributes.append(classAttribute)
 lines = make_lines(hdr, data_frame, arff_meta)
 if out_file is not None:
     with open(out_file, "w") as out:
